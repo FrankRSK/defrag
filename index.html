@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Defrag Bildschirmschoner</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #c0c0c0;
+            font-family: 'MS Sans Serif', sans-serif;
+            font-size: 11px;
+            overflow: hidden;
+            cursor: none;
+        }
+
+        .window {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            bottom: 20px;
+            background: #c0c0c0;
+            border: 2px outset #c0c0c0;
+        }
+
+        .title-bar {
+            background: linear-gradient(90deg, #0a246a 0%, #a6caf0 100%);
+            color: white;
+            padding: 2px 4px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            height: 18px;
+        }
+
+        .title-text {
+            flex: 1;
+            font-size: 11px;
+        }
+
+        .menu-bar {
+            background: #c0c0c0;
+            border-bottom: 1px solid #808080;
+            padding: 4px;
+            font-size: 11px;
+        }
+
+        .status-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 20px;
+            background: #c0c0c0;
+            border-top: 1px inset #c0c0c0;
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
+            font-size: 11px;
+        }
+
+        .disk-map {
+            margin: 10px;
+            background: white;
+            border: 2px inset #c0c0c0;
+            padding: 4px;
+            height: calc(100% - 80px);
+            overflow: hidden;
+        }
+
+        .block-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1px;
+            height: 100%;
+            content: '';
+        }
+
+        .block {
+            width: 8px;
+            height: 8px;
+            display: inline-block;
+            transition: background-color 0.3s ease;
+        }
+
+        /* Neue realistische Farben */
+        .block.free { background-color: #d3d3d3; } /* Hellgrau - freier Speicherplatz */
+        .block.unfragmented { background-color: #00ff00; } /* Grün - nicht fragmentiert */
+        .block.mft { background-color: #800080; } /* Lila - MFT */
+        .block.immovable { background-color: #696969; } /* Dunkelgrau - nicht verschiebbar */
+        .block.processing { background-color: #ffa500; } /* Orange - In Bearbeitung */
+        .block.fragmented { background-color: #ff0000; } /* Rot - fragmentiert */
+        .block.defragmented { background-color: #0000ff; } /* Blau - defragmentiert */
+        .block.reading { background-color: #ffff00; } /* Gelb - Lesen */
+        .block.writing { background-color: #ff00ff; } /* Magenta - Schreiben */
+
+        .legend {
+            position: absolute;
+            top: 40px;
+            right: 30px;
+            background: #c0c0c0;
+            border: 2px outset #c0c0c0;
+            padding: 8px;
+            font-size: 10px;
+            cursor: move;
+            user-select: none;
+            z-index: 1000;
+        }
+
+        .legend-title {
+            background: linear-gradient(90deg, #0a246a 0%, #a6caf0 100%);
+            color: white;
+            padding: 2px 4px;
+            margin: -8px -8px 8px -8px;
+            font-weight: bold;
+            cursor: move;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 2px 0;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            margin-right: 6px;
+            border: 1px solid #000;
+        }
+
+        .progress-info {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            background: #c0c0c0;
+            border: 1px inset #c0c0c0;
+            padding: 8px;
+            font-size: 11px;
+            min-width: 200px;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+
+        .active-block {
+            animation: blink 0.6s infinite;
+        }
+
+        .being-processed {
+            box-shadow: 0 0 4px #ffa500;
+        }
+    </style>
+</head>
+<body>
+    <div class="window">
+        <div class="title-bar">
+            <div class="title-text">Defragmentierung - Laufwerk C:</div>
+            <div style="margin-left: auto;">
+                <span style="background: #c0c0c0; color: #000; padding: 1px 4px; margin: 0 1px;">_</span>
+                <span style="background: #c0c0c0; color: #000; padding: 1px 4px; margin: 0 1px;">□</span>
+                <span style="background: #c0c0c0; color: #000; padding: 1px 4px; margin: 0 1px;">×</span>
+            </div>
+        </div>
+        
+        <div class="menu-bar">
+            Laufwerk &nbsp; Ansicht &nbsp; Hilfe
+        </div>
+
+        <div class="legend" id="legend">
+            <div class="legend-title">Legende</div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #d3d3d3;"></div>
+                Freier Speicherplatz
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #00ff00;"></div>
+                Nicht fragmentiert
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #800080;"></div>
+                MFT (Master File Table)
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #696969;"></div>
+                Nicht verschiebbar
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ffa500;"></div>
+                In Bearbeitung
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ff0000;"></div>
+                Fragmentiert
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #0000ff;"></div>
+                Defragmentiert
+            </div>
+        </div>
+
+        <div class="progress-info">
+            <div>Durchgang: <span id="pass">1</span> von 10</div>
+            <div>Abgeschlossen: <span id="percent">0</span>%</div>
+            <div>Verbleibende Zeit: <span id="time">Wird berechnet...</span></div>
+            <div>Fragmentierte Dateien: <span id="fragmented">127</span></div>
+        </div>
+
+        <div class="disk-map">
+            <div class="block-grid" id="blockGrid"></div>
+        </div>
+
+        <div class="status-bar">
+            <span id="status">Analysiere Laufwerk C:...</span>
+        </div>
+    </div>
+
+    <script>
+        let blocks = [];
+        let currentBlock = 0;
+        let pass = 1;
+        let percent = 0;
+        let fragmented = 0;
+        let totalFragmented = 0;
+        let isDefragging = false;
+        let blocksPerRow = 0;
+        let currentProcessingRow = 0;
+        let currentProcessingCol = 0;
+        let audioContext = null;
+        let isProcessingSequentially = false;
+        let startTime = Date.now();
+        let processedBlocks = 0;
+        
+        const blockTypes = ['free', 'unfragmented', 'fragmented', 'mft', 'immovable'];
+        const statusMessages = [
+            'Analysiere Laufwerk C:...',
+            'Defragmentiere Dateien...',
+            'Optimiere Datenplatzierung...',
+            'Konsolidiere freien Speicherplatz...',
+            'Überprüfe Dateisystem...',
+            'Finalisiere Optimierung...'
+        ];
+
+        // Audio Context für realistische Festplatten-Geräusche
+        function initAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (e) {
+                console.log('Audio not supported');
+            }
+        }
+
+        // Realistisches Festplatten-Geräusch (Seeking + Spinning)
+        function playHardDriveSound(type = 'read', duration = 200) {
+            if (!audioContext) return;
+            
+            const oscillator1 = audioContext.createOscillator();
+            const oscillator2 = audioContext.createOscillator();
+            const oscillator3 = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            const filterNode = audioContext.createBiquadFilter();
+            const noiseBuffer = createNoiseBuffer();
+            const noiseSource = audioContext.createBufferSource();
+            const noiseGain = audioContext.createGain();
+            
+            // Hauptoszillator für Spindelmotor (7200 RPM = 120 Hz)
+            oscillator1.connect(filterNode);
+            oscillator1.frequency.setValueAtTime(120 + Math.random() * 5, audioContext.currentTime);
+            oscillator1.type = 'sawtooth';
+            
+            // Seek-Geräusch (charakteristisches "Klicken")
+            if (type === 'seek') {
+                oscillator2.connect(filterNode);
+                oscillator2.frequency.setValueAtTime(1200, audioContext.currentTime);
+                oscillator2.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.05);
+                oscillator2.type = 'square';
+                
+                // Zweites Klick-Geräusch für realistischen Seek
+                oscillator3.connect(filterNode);
+                oscillator3.frequency.setValueAtTime(800, audioContext.currentTime + 0.1);
+                oscillator3.frequency.exponentialRampToValueAtTime(300, audioContext.currentTime + 0.15);
+                oscillator3.type = 'triangle';
+            } else {
+                // Lese-/Schreibgeräusch (kontinuierlicher)
+                oscillator2.connect(filterNode);
+                const baseFreq = type === 'write' ? 200 : 350;
+                oscillator2.frequency.setValueAtTime(baseFreq, audioContext.currentTime);
+                oscillator2.frequency.linearRampToValueAtTime(
+                    baseFreq + (Math.random() * 100 - 50), 
+                    audioContext.currentTime + duration / 1000
+                );
+                oscillator2.type = 'triangle';
+            }
+            
+            // Rauschen für mechanische Geräusche
+            noiseSource.buffer = noiseBuffer;
+            noiseSource.connect(noiseGain);
+            noiseGain.connect(filterNode);
+            
+            filterNode.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // Filter für realistische Dämpfung
+            filterNode.type = 'lowpass';
+            filterNode.frequency.setValueAtTime(type === 'seek' ? 2000 : 800, audioContext.currentTime);
+            filterNode.Q.setValueAtTime(1.5, audioContext.currentTime);
+            
+            // Lautstärke-Hüllkurve
+            const volume = type === 'seek' ? 0.12 : 0.06;
+            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+            
+            if (type === 'seek') {
+                // Kurzer, scharfer Seek-Sound
+                gainNode.gain.linearRampToValueAtTime(volume, audioContext.currentTime + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+            } else {
+                // Längerer Lese-/Schreibsound
+                gainNode.gain.linearRampToValueAtTime(volume, audioContext.currentTime + 0.05);
+                gainNode.gain.linearRampToValueAtTime(volume * 0.8, audioContext.currentTime + duration / 2000);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration / 1000);
+            }
+            
+            // Rauschen-Hüllkurve
+            const noiseVol = type === 'seek' ? 0.02 : 0.008;
+            noiseGain.gain.setValueAtTime(0, audioContext.currentTime);
+            noiseGain.gain.linearRampToValueAtTime(noiseVol, audioContext.currentTime + 0.02);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration / 1000);
+            
+            // Starte alle Oszillatoren
+            oscillator1.start(audioContext.currentTime);
+            oscillator1.stop(audioContext.currentTime + duration / 1000);
+            oscillator2.start(audioContext.currentTime);
+            oscillator2.stop(audioContext.currentTime + (type === 'seek' ? 0.2 : duration / 1000));
+            
+            if (type === 'seek') {
+                oscillator3.start(audioContext.currentTime + 0.1);
+                oscillator3.stop(audioContext.currentTime + 0.25);
+            }
+            
+            noiseSource.start(audioContext.currentTime);
+            noiseSource.stop(audioContext.currentTime + duration / 1000);
+        }
+
+        // Erstelle realistischen Rauschpuffer für mechanische Geräusche
+        function createNoiseBuffer() {
+            const bufferSize = audioContext.sampleRate * 0.8;
+            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const output = buffer.getChannelData(0);
+            
+            // Generiere gefilterten "rosa" Rausch für realistischere mechanische Geräusche
+            let b0, b1, b2, b3, b4, b5, b6;
+            b0 = b1 = b2 = b3 = b4 = b5 = b6 = 0.0;
+            
+            for (let i = 0; i < bufferSize; i++) {
+                const white = Math.random() * 2 - 1;
+                b0 = 0.99886 * b0 + white * 0.0555179;
+                b1 = 0.99332 * b1 + white * 0.0750759;
+                b2 = 0.96900 * b2 + white * 0.1538520;
+                b3 = 0.86650 * b3 + white * 0.3104856;
+                b4 = 0.55000 * b4 + white * 0.5329522;
+                b5 = -0.7616 * b5 - white * 0.0168980;
+                output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.05;
+                b6 = white * 0.115926;
+            }
+            
+            return buffer;
+        }
+
+        // Legende verschiebbar machen
+        function makeLegendDraggable() {
+            const legend = document.getElementById('legend');
+            let isDragging = false;
+            let dragOffset = { x: 0, y: 0 };
+
+            legend.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                dragOffset.x = e.clientX - legend.offsetLeft;
+                dragOffset.y = e.clientY - legend.offsetTop;
+                legend.style.cursor = 'grabbing';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    const newX = e.clientX - dragOffset.x;
+                    const newY = e.clientY - dragOffset.y;
+                    
+                    // Begrenze auf Fensterbereich
+                    const maxX = window.innerWidth - legend.offsetWidth - 20;
+                    const maxY = window.innerHeight - legend.offsetHeight - 20;
+                    
+                    legend.style.left = Math.max(0, Math.min(newX, maxX)) + 'px';
+                    legend.style.top = Math.max(0, Math.min(newY, maxY)) + 'px';
+                    legend.style.right = 'auto';
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                legend.style.cursor = 'move';
+            });
+        }
+
+        function initializeBlocks() {
+            const grid = document.getElementById('blockGrid');
+            const windowWidth = window.innerWidth - 100;
+            const windowHeight = window.innerHeight - 200;
+            blocksPerRow = Math.floor(windowWidth / 10);
+            const totalRows = Math.floor(windowHeight / 10);
+            const totalBlocks = blocksPerRow * totalRows;
+
+            grid.innerHTML = '';
+            blocks = [];
+            currentProcessingRow = 0;
+            currentProcessingCol = 0;
+            fragmented = 0;
+
+            for (let i = 0; i < totalBlocks; i++) {
+                const block = document.createElement('div');
+                block.className = 'block';
+                
+                const rand = Math.random();
+                // Realistische Verteilung mit neuen Farben
+                if (i < 20 && rand < 0.4) {
+                    // MFT am Anfang
+                    block.classList.add('mft');
+                } else if (i < 80 && rand < 0.2) {
+                    // Systemdateien (nicht verschiebbar)
+                    block.classList.add('immovable');
+                } else if (rand < 0.35) {
+                    // Fragmentierte Dateien
+                    block.classList.add('fragmented');
+                    fragmented++;
+                } else if (rand < 0.75) {
+                    // Nicht fragmentierte Dateien
+                    block.classList.add('unfragmented');
+                } else {
+                    // Freier Speicherplatz
+                    block.classList.add('free');
+                }
+                
+                grid.appendChild(block);
+                blocks.push(block);
+            }
+            
+            totalFragmented = fragmented;
+        }
+
+        // Realistische Zeitberechnung basierend auf Fortschritt
+        function calculateRemainingTime() {
+            if (processedBlocks === 0) return "Wird berechnet...";
+            
+            const elapsedTime = (Date.now() - startTime) / 1000; // in Sekunden
+            const rate = processedBlocks / elapsedTime; // Blöcke pro Sekunde
+            const remainingBlocks = totalFragmented - (totalFragmented - fragmented);
+            const remainingSeconds = Math.ceil(remainingBlocks / rate);
+            
+            // Füge etwas Varianz hinzu für Realismus
+            const variance = Math.floor(Math.random() * 30) - 15;
+            const adjustedSeconds = Math.max(10, remainingSeconds + variance);
+            
+            const minutes = Math.floor(adjustedSeconds / 60);
+            const seconds = adjustedSeconds % 60;
+            
+            return `${minutes}:${seconds.toString().padStart(2, '0')} min`;
+        }
+
+        function updateProgress() {
+            document.getElementById('pass').textContent = pass;
+            document.getElementById('percent').textContent = Math.floor(percent);
+            document.getElementById('fragmented').textContent = Math.max(0, fragmented);
+            document.getElementById('time').textContent = calculateRemainingTime();
+        }
+
+        function processSequentialDefrag() {
+            if (!isProcessingSequentially) {
+                isProcessingSequentially = true;
+                processNextBlock();
+            }
+        }
+
+        function processNextBlock() {
+            if (currentProcessingRow * blocksPerRow + currentProcessingCol >= blocks.length) {
+                // Durchgang beendet
+                currentProcessingRow = 0;
+                currentProcessingCol = 0;
+                pass++;
+                percent = 0;
+                isProcessingSequentially = false;
+                
+                if (pass > 10) {
+                    pass = 1;
+                    startTime = Date.now();
+                    processedBlocks = 0;
+                    // Neue Fragmentierung erstellen
+                    setTimeout(() => {
+                        fragmented = 0;
+                        blocks.forEach((block, index) => {
+                            if (!block.classList.contains('mft') && !block.classList.contains('immovable')) {
+                                block.className = 'block';
+                                const rand = Math.random();
+                                if (rand < 0.35) {
+                                    block.classList.add('fragmented');
+                                    fragmented++;
+                                } else if (rand < 0.75) {
+                                    block.classList.add('unfragmented');
+                                } else {
+                                    block.classList.add('free');
+                                }
+                            }
+                        });
+                        totalFragmented = fragmented;
+                    }, 2000);
+                }
+                return;
+            }
+
+            const blockIndex = currentProcessingRow * blocksPerRow + currentProcessingCol;
+            const block = blocks[blockIndex];
+            
+            if (block && !block.classList.contains('mft') && !block.classList.contains('immovable')) {
+                // Bestimme Anzahl der zu bearbeitenden Blöcke (1-3 für Realismus)
+                const blockCount = Math.min(3, Math.floor(Math.random() * 3) + 1);
+                const blocksToProcess = [];
+                
+                for (let i = 0; i < blockCount; i++) {
+                    const nextIndex = blockIndex + i;
+                    if (nextIndex < blocks.length && blocks[nextIndex]) {
+                        const nextBlock = blocks[nextIndex];
+                        if (!nextBlock.classList.contains('mft') && !nextBlock.classList.contains('immovable')) {
+                            blocksToProcess.push(nextBlock);
+                        }
+                    }
+                }
+
+                // Bearbeite die ausgewählten Blöcke
+                processBlocks(blocksToProcess);
+                
+                // Springe zur nächsten Position
+                currentProcessingCol += blockCount;
+                if (currentProcessingCol >= blocksPerRow) {
+                    currentProcessingRow++;
+                    currentProcessingCol = 0;
+                }
+            } else {
+                // Springe zum nächsten Block
+                currentProcessingCol++;
+                if (currentProcessingCol >= blocksPerRow) {
+                    currentProcessingRow++;
+                    currentProcessingCol = 0;
+                }
+            }
+
+            // Fortschritt aktualisieren
+            const totalBlocks = blocks.length;
+            const processedBlocksTotal = currentProcessingRow * blocksPerRow + currentProcessingCol;
+            percent = (processedBlocksTotal / totalBlocks) * 100;
+            
+            updateProgress();
+            
+            // Nächsten Block nach realistischerer Pause bearbeiten
+            setTimeout(processNextBlock, 1200 + Math.random() * 2000);
+        }
+
+        function processBlocks(blocksToProcess) {
+            if (blocksToProcess.length === 0) return;
+
+            // Realistische Seek-Zeit mit charakteristischem Geräusch
+            playHardDriveSound('seek', 180);
+
+            // Phase 1: Mehrfache Lesevorgänge (realistischer)
+            const needsReading = blocksToProcess.some(block => 
+                block.classList.contains('fragmented') || block.classList.contains('unfragmented')
+            );
+
+            if (needsReading) {
+                // Erster Lesevorgang nach Seek-Zeit
+                setTimeout(() => {
+                    playHardDriveSound('read', 600 + blocksToProcess.length * 150);
+                    
+                    blocksToProcess.forEach(block => {
+                        if (block.classList.contains('fragmented') || block.classList.contains('unfragmented')) {
+                            block.classList.add('reading', 'active-block', 'being-processed');
+                        }
+                    });
+
+                    // Für fragmentierte Dateien: Mehrere Lesevorgänge erforderlich
+                    const fragmentedInProcess = blocksToProcess.filter(block => 
+                        block.classList.contains('fragmented')
+                    );
+                    
+                    if (fragmentedInProcess.length > 0) {
+                        // Zweiter Lesevorgang für fragmentierte Teile (an anderer Stelle der Platte)
+                        setTimeout(() => {
+                            playHardDriveSound('seek', 120); // Kurzer Seek zu anderem Fragment
+                            setTimeout(() => {
+                                playHardDriveSound('read', 400);
+                                
+                                // Dritter Lesevorgang für weitere Fragmente
+                                setTimeout(() => {
+                                    if (Math.random() < 0.6) { // 60% Chance auf dritten Lesevorgang
+                                        playHardDriveSound('seek', 90);
+                                        setTimeout(() => {
+                                            playHardDriveSound('read', 300);
+                                            setTimeout(() => {
+                                                processBlocksReadComplete(blocksToProcess);
+                                            }, 400);
+                                        }, 150);
+                                    } else {
+                                        processBlocksReadComplete(blocksToProcess);
+                                    }
+                                }, 500);
+                            }, 200);
+                        }, 700);
+                    } else {
+                        // Einfache nicht-fragmentierte Datei
+                        setTimeout(() => {
+                            processBlocksReadComplete(blocksToProcess);
+                        }, 800);
+                    }
+                }, 250);
+            } else {
+                // Direkt schreiben (freie Blöcke)
+                setTimeout(() => {
+                    processBlocksWritePhase(blocksToProcess);
+                }, 400);
+            }
+        }
+
+        function processBlocksReadComplete(blocksToProcess) {
+            // Nach dem Lesen: Leeren
+            blocksToProcess.forEach(block => {
+                if (block.classList.contains('reading')) {
+                    block.classList.remove('reading', 'active-block', 'fragmented', 'unfragmented');
+                    block.classList.add('free');
+                }
+            });
+
+            // Phase 2: Schreiben (nach längerer Pause für Seek)
+            setTimeout(() => {
+                playHardDriveSound('seek', 120);
+                setTimeout(() => {
+                    processBlocksWritePhase(blocksToProcess);
+                }, 200);
+            }, 300);
+        }
+
+        function processBlocksWritePhase(blocksToProcess) {
+            // Schreibvorgang mit realistischem Timing
+            playHardDriveSound('write', 500 + blocksToProcess.length * 200);
+            
+            blocksToProcess.forEach(block => {
+                if (block.classList.contains('free')) {
+                    block.classList.add('writing', 'active-block', 'being-processed');
+                }
+            });
+
+            setTimeout(() => {
+                // Verify-Phase (manche HDDs verifizieren geschriebene Daten)
+                if (Math.random() < 0.3) { // 30% Chance auf Verify
+                    playHardDriveSound('read', 200);
+                    setTimeout(() => {
+                        finalizeBlocķsWrite(blocksToProcess);
+                    }, 300);
+                } else {
+                    finalizeBlocķsWrite(blocksToProcess);
+                }
+            }, 700 + blocksToProcess.length * 150);
+        }
+
+        function finalizeBlocķsWrite(blocksToProcess) {
+            // Nach dem Schreiben: Finalisieren
+            blocksToProcess.forEach(block => {
+                if (block.classList.contains('writing')) {
+                    block.classList.remove('writing', 'active-block', 'being-processed', 'free');
+                    block.classList.add('defragmented');
+                    processedBlocks++;
+                    
+                    // Nach kurzer Zeit wird es zu "nicht fragmentiert" (grün)
+                    setTimeout(() => {
+                        if (block.classList.contains('defragmented')) {
+                            block.classList.remove('defragmented');
+                            block.classList.add('unfragmented');
+                        }
+                    }, 1200);
+                }
+            });
+
+            // Fragmentierung realistisch reduzieren
+            const actuallyProcessed = blocksToProcess.filter(block => 
+                block.classList.contains('defragmented')
+            ).length;
+            fragmented = Math.max(0, fragmented - actuallyProcessed);
+        }
+
+        function animateDefrag() {
+            // Sequenzielle Bearbeitung hat Vorrang
+            if (Math.random() < 0.8) {
+                processSequentialDefrag();
+            } else {
+                // Gelegentlich auch andere Aktionen
+                const strategy = Math.random();
+                
+                if (strategy < 0.6) {
+                    moveFragmentedFiles();
+                } else {
+                    consolidateFreeSpace();
+                }
+            }
+            
+            // Status aktualisieren
+            const statusIndex = Math.floor(Math.random() * statusMessages.length);
+            document.getElementById('status').textContent = statusMessages[statusIndex];
+        }
+
+        function moveFragmentedFiles() {
+            // Finde fragmentierte Datei
+            const fragmentedBlocks = blocks.filter(block => block.classList.contains('fragmented'));
+            if (fragmentedBlocks.length === 0) return;
+
+            const sourceBlock = fragmentedBlocks[Math.floor(Math.random() * fragmentedBlocks.length)];
+            const freeBlocks = blocks.filter(block => block.classList.contains('free'));
+            
+            if (freeBlocks.length > 0) {
+                processBlocks([sourceBlock]);
+            }
+        }
+
+        function consolidateFreeSpace() {
+            // Konsolidiere freien Speicherplatz
+            for (let i = 0; i < blocks.length - 1; i++) {
+                if (blocks[i].classList.contains('unfragmented') && 
+                    blocks[i + 1].classList.contains('free') && 
+                    i + 2 < blocks.length && 
+                    blocks[i + 2].classList.contains('fragmented')) {
+                    
+                    processBlocks([blocks[i + 2]]);
+                    break;
+                }
+            }
+        }
+
+        function startDefrag() {
+            initAudio();
+            initializeBlocks();
+            makeLegendDraggable();
+            startTime = Date.now();
+            updateProgress();
+            
+            // Starte Animation mit realistischeren Intervallen
+            const interval = setInterval(animateDefrag, 3000 + Math.random() * 2000);
+            
+            // Neuinitialisierung bei Fenstergröße-Änderung
+            window.addEventListener('resize', () => {
+                setTimeout(() => {
+                    initializeBlocks();
+                    currentProcessingRow = 0;
+                    currentProcessingCol = 0;
+                    startTime = Date.now();
+                    processedBlocks = 0;
+                }, 100);
+            });
+        }
+
+        // Vollbild bei Klick
+        document.addEventListener('click', (e) => {
+            // Nicht bei Legende
+            if (!e.target.closest('#legend')) {
+                if (audioContext && audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                }
+            }
+        });
+
+        // ESC zum Beenden
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        });
+
+        // Starte Defragmentierung
+        window.addEventListener('load', startDefrag);
+    </script>
+</body>
+</html>
