@@ -1,0 +1,7 @@
+Hier handelt es sich um eine nostalgische Bildschirmschoner-Simulation, die das klassische Defragmentierungs-Programm aus älteren Windows-Versionen nachahmt.
+
+Es stellt visuell eine Festplattenoberfläche mit farbigen Blöcken dar. Diese Blöcke symbolisieren den Zustand von Daten: fragmentiert (rot), nicht fragmentiert (grün), frei (hellgrau) etc. Die Simulation "analysiert" und "verschiebt" diese Blöcke, um den freien Speicherplatz zu konsolidieren und fragmentierte Dateien zu "reparieren".
+
+Ein besonderes Merkmal sind die sehr realistisch generierten Festplattengeräusche für Lese-, Schreib- und Suchvorgänge, die eine authentische Atmosphäre schaffen. Die Benutzeroberfläche im Stil von Windows 9x/2000, inklusive einer verschiebbaren Legende und Fortschrittsanzeige, verstärkt den Retro-Eindruck.
+
+Es ist also kein interaktives Spiel, sondern eine visuelle und auditive Hommage an vergangene Computer-Zeiten, die im Vollbildmodus als Bildschirmschoner laufen kann.
